@@ -1,7 +1,7 @@
 {
 	"name": "yamvish-model",
 	"version": "0.2.0",
-	"description": "minimalistic Model tools (aka conjonction of validation, autoSave and ModelMethods (create, get, delete, save)",
+	"description": "minimalistic Model tools for yamvish (aka conjonction of validation, autoSave and ModelMethods (create, get, delete, save)",
 	"main": "index.js",
 	"scripts": {
 		"test": "mocha"
