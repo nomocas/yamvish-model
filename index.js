@@ -22,28 +22,28 @@ y.model = {
 		if (id)
 			return y.c3po.put(protocol, value)
 				.then(updateLocal)
-				.log(path + ' put : result');
+				.logError(path + ' put');
 		else
 			return y.c3po.post(protocol, value)
 				.then(updateLocal)
-				.log(path + ' post : result');
+				.logError(path + ' post');
 	},
 	load: function(context, path, protocol, request) {
 		return context.setAsync(path, y.c3po.get(protocol, request))
-			.log(path + ' get : result');
+			.logError(path + ' get');
 	},
 	create: function(context, path, protocol) {
 		return context.waiting(
-				y.c3po.default(protocol)
-				.then(function(obj) {
-					return y.c3po.post(protocol, obj);
-				})
-				.then(function(s) {
-					context.set(path, s);
-					return s;
-				})
-			)
-			.log(path + ' post : result');
+			y.c3po.default(protocol)
+			.then(function(obj) {
+				return y.c3po.post(protocol, obj);
+			})
+			.then(function(s) {
+				context.set(path, s);
+				return s;
+			})
+			.logError(path + ' post')
+		);
 	},
 	delete: function(context, path, protocol, id) {
 		var value = context.get(path),
@@ -54,7 +54,7 @@ y.model = {
 			throw new Error('no id found for deletion in : ' + path);
 		context.del(path);
 		return y.c3po.del(protocol, id)
-			.log(path + ' delete : result');
+			.logError(path + ' delete');
 	}
 };
 
@@ -91,24 +91,24 @@ y.Template.prototype.autoSave = function(path, protocol) {
 					return; // nothing to do as : it has been loaded or .create will post it
 				else
 					return y.c3po.patch(protocol, id, value, p.join('.'))
-						.log(path + ' patch property : result');
+						.logError(path + ' patch property');
 			case 'delete':
 				if (!p.length)
 					return y.model.delete(this, path, protocol, id);
 				else
 					return y.c3po.remote(protocol, 'deleteproperty', { id: id, path: p.join('.') })
-						.log(path + ' delete property : result');
+						.logError(path + ' delete property');
 			case 'push':
 				return y.c3po.remote(protocol, 'pushitem', { id: id, data: value, path: p.join('.')  })
-					.log(path + ' pushitem result');
+					.logError(path + ' pushitem');
 			case 'displaceItem':
 				return y.c3po.remote(protocol, 'displaceitem', { id: id, path: p.join('.'), fromIndex: value.fromIndex, toIndex: value.toIndex })
-					.log(path + ' displaceitem result');
+					.logError(path + ' displaceitem');
 			case 'insertItem':
 				return y.c3po.remote(protocol, 'insertitem', { id: id, path: p.join('.'), index: value.index, data: value.data })
-					.log(path + ' insertitem result');
+					.logError(path + ' insertitem');
 		}
-	}, true);
+	}, true /* upward */ );
 };
 
 y.Template.prototype.model = function(path, protocol, autoSave, rule) {
