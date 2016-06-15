@@ -78,7 +78,7 @@ y.Template.prototype.autoSave = function(path, protocol) {
 		// console.log('auto save : update : ', value, type, p, key);
 		if (this.get('$errors.' + path))
 			return;
-		// skip any $* vars updates
+		// skip any $* vars updates (as they don't belong to context output when saved)
 		if (p.length && p[0][0] === '$')
 			return;
 
