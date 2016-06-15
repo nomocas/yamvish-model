@@ -1,0 +1,26 @@
+{
+	"name": "yamvish-model",
+	"version": "0.2.0",
+	"description": "minimalistic Model tools (aka conjonction of validation, autoSave and ModelMethods (create, get, delete, save)",
+	"main": "index.js",
+	"scripts": {
+		"test": "mocha"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/nomocas/yamvish-model.git"
+	},
+	"keywords": [
+		"yamvish",
+		"model",
+		"validation",
+		"autosave"
+	],
+	"dependencies": {},
+	"author": "Gilles Coomans <gilles.coomans@gmail.com>",
+	"license": "MIT",
+	"bugs": {
+		"url": "https://github.com/nomocas/yamvish-model/issues"
+	},
+	"homepage": "https://github.com/nomocas/yamvish-model#readme"
+}
