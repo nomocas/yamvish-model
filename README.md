@@ -22,19 +22,19 @@ npm i yamvish-model --save
 var y = require('yamvish');
 require('yamvish-model');
 
-y.c3po.protocols.myprotocol = new AxiosClient( /* ... */ );
-
 var template = y()
-.model('$this', 'myprotocol', true /* autoSave */)
+.load('$this', 'myprotocol.first::?published')
+.model('$this', 'myprotocol', true /* autoSave */ /* , ?arightRule */)
 .div(
   y().h(1, y().contentEditable('{{ title }}', null, 'text', 'blur'))
   .p(
     y().contentEditable('{{ content }}', null, 'text', 'blur')
   )
 );
-
-
 ```
+
+See [c3po](https://github.com/nomocas/c3po) and [yamvish-c3po](https://github.com/nomocas/c3po) for protocols definition and usage.
+
 
 More coming soon.
 
