@@ -9,6 +9,12 @@ require('yamvish-c3po');
 
 var ID = 0;
 
+function isStatePath(path) {
+	return path.some(function(p) {
+		return p[0] === '$';
+	});
+}
+
 y.model = {
 	save: function(context, path, protocol, modelID) {
 		if (context.get('$errors.' + path))
@@ -106,12 +112,12 @@ y.Template.prototype.autoSave = function(path, protocol, modelID, delay) {
 
 	var save = function(value, type, p, key) {
 
-		var object = this.get(path),
+		var object = this.output(path),
 			id = object.id,
 			self = this,
 			agoraUpdate = function(s) {
 				self.set('$success.' + path, true)
-					.toAgora(protocol + '.update', modelID, self.get(path), self);
+					.toAgora(protocol + '.update', modelID, self.output(path), self);
 				return s;
 			},
 			setError = function(e) {
@@ -159,7 +165,7 @@ y.Template.prototype.autoSave = function(path, protocol, modelID, delay) {
 		if (this.get('$error.' + path))
 			return;
 		// skip any $* vars updates (as they don't belong to context output when saved)
-		if (p.length && p[0][0] === '$')
+		if (p.length && isStatePath(p))
 			return;
 
 		if (type === 'set' && !p.length)
@@ -213,7 +219,7 @@ y.Template.prototype.model = function(path, protocol, autoSave, validator, autoS
 			y().validate(path, validator)
 		)
 		.if(autoSave,
-			y().autoSave(path, protocol, ID, autoSaveDelay)
+			y().autoSave(path, protocol, mID, autoSaveDelay)
 		)
 	);
 };
@@ -232,7 +238,7 @@ y.collectionModel = {
 			})
 			.logError(path + ' get');
 	},
-	pushItem: function(context, path, protocol) {
+	newItem: function(context, path, protocol) {
 		return context.pushAsync(path,
 				y.c3po.default(protocol)
 				.then(function(obj) {
@@ -249,27 +255,33 @@ y.collectionModel = {
 			});
 	},
 	deleteItem: function(context, path, protocol, modelID, id) {
-		var value = context.get(path),
-			id = value ? (value.id || id) : id;
-		if (!value)
-			throw new Error('nothing to delete at : ' + path);
-		if (!id)
-			throw new Error('no id found for deletion in : ' + path);
-		context.del(path);
+		var arr = context.get(path),
+			index = 0,
+			ok = arr.some(function(item) {
+				if (item.id === id)
+					return true;
+				index++;
+			});
+		if (!ok) {
+			console.warn('collection model (%s) could not delete item : no item found with ', path, id);
+			return Promise.reject(new Error('deleteItem failed : nothing found with :' + id));
+		}
+		context.del(path + '.' + index);
 		return y.c3po.del(protocol, id)
 			.then(function(s) {
-				context.set('$success.' + path, true).toAgora(protocol + '.delete', id);
+				context.set('$success.' + path, true)
+					.toAgora(protocol + '.delete', modelID, id);
 				return s;
 			})
 			.catch(function(e) {
 				context.set('$error.' + path, e.message);
 				throw e;
 			})
-			.logError(protocol + ' - ' + path + ' delete : ' + id);
+			.logError(protocol + ' - ' + path + ' deleteItem : ' + id);
 	}
 };
 
-y.Template.prototype.autoSaveCollection = function(path, protocol, delay) {};
+y.Template.prototype.autoSaveCollection = function(path, protocol, mID, delay) {};
 
 y.Template.prototype.collectionModelMethods = function(path, protocol, modelID) {
 	return this
@@ -279,8 +291,8 @@ y.Template.prototype.collectionModelMethods = function(path, protocol, modelID) 
 		.toMethods(path + '.loadCollection', function(e, request) {
 			return y.collectionModel.load(this, path, protocol, request);
 		})
-		.toMethods(path + '.pushItem', function(e, request) {
-			return y.collectionModel.pushItem(this, path, protocol);
+		.toMethods(path + '.newItem', function(e, request) {
+			return y.collectionModel.newItem(this, path, protocol);
 		});
 };
 
@@ -294,7 +306,7 @@ y.Template.prototype.collectionModel = function(path, protocol, autoSave, valida
 	var mID = ID++;
 	return this.client(
 		y()
-		.collectionModelMethods(path, protocol) // newItem(), loadCollection(query), saveItem(index), deleteItem(index)
+		.collectionModelMethods(path, protocol, mID) // newItem(), loadCollection(query), saveItem(index), deleteItem(index)
 		.onAgora(protocol + '.update', function(emitter, modelID, object) {
 			if (modelID === mID) // block loop
 				return;
@@ -318,18 +330,18 @@ y.Template.prototype.collectionModel = function(path, protocol, autoSave, valida
 			var arr = this.get(path),
 				index = 0;
 			var ok = arr.some(function(item) {
-				if (item.id === object.id) {
-					this.delete(path + '.' + index);
+				if (item.id === id)
 					return true;
-				}
 				index++;
 			});
+			if (ok)
+				this.delete(path + '.' + index);
 		})
 		.if(validator, // should be an array's validator
 			y().validate(path, validator)
 		)
 		.if(autoSave, // should be :
-			y().autoSaveCollection(path, protocol)
+			y().autoSaveCollection(path, protocol, mID)
 			// should do "collection save" management : aka do remote : post new item, insertItem, displaceItem
 		)
 	);
