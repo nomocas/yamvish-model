@@ -79,9 +79,9 @@ y.model = {
 			throw new Error('nothing to delete at : ' + path);
 		if (!id)
 			throw new Error('no id found for deletion in : ' + path);
-		context.del(path);
 		return y.c3po.del(protocol, id)
 			.then(function(s) {
+				context.del(path);
 				context.set('$success.' + path, true).toAgora(protocol + '.delete', modelID, id);
 				return s;
 			})
@@ -93,7 +93,7 @@ y.model = {
 	}
 };
 
-y.Template.prototype.modelMethods = function(path, protocol, modelID) {
+y.Context.prototype.modelMethods = function(path, protocol, modelID) {
 	return this.toMethods(path + '.saveModel', function() {
 			return y.model.save(this, path, protocol, modelID);
 		})
@@ -108,7 +108,7 @@ y.Template.prototype.modelMethods = function(path, protocol, modelID) {
 		});
 };
 
-y.Template.prototype.autoSave = function(path, protocol, modelID, delay) {
+y.Context.prototype.autoSave = function(path, protocol, modelID, delay) {
 
 	var save = function(value, type, p, key) {
 
@@ -136,7 +136,7 @@ y.Template.prototype.autoSave = function(path, protocol, modelID, delay) {
 						.logError(path + ' patch property');
 			case 'delete':
 				if (!p.length)
-					return y.model.delete(this, path, protocol, modelID, id);
+					return; // nothing to do 
 				else
 					return y.c3po.remote(protocol, 'deleteproperty', { id: id, path: p.join('.') })
 						.then(agoraUpdate)
@@ -168,7 +168,7 @@ y.Template.prototype.autoSave = function(path, protocol, modelID, delay) {
 		if (p.length && isStatePath(p))
 			return;
 
-		if (type === 'set' && !p.length)
+		if ((type === 'set' || type === 'delete') && !p.length)
 			return; // nothing to do as : it has been loaded or .create will post it or it has been updated from save action
 
 		// console.log('autoSave update : ', delay, value, type, p);
@@ -189,6 +189,32 @@ y.Template.prototype.autoSave = function(path, protocol, modelID, delay) {
 };
 
 
+y.Context.prototype.model = function(path, protocol, autoSave, validator, autoSaveDelay) {
+
+	var mID = ID++;
+	this.modelMethods(path, protocol)
+		.onAgora(protocol + '.update', function(emitter, modelID, object) {
+			if (modelID === mID) // block loop
+				return;
+			var obj = this.get(path);
+			// console.log('model on agora update : ', obj, object);
+			if (obj.id === object.id)
+				this.set(path, object);
+		})
+		.onAgora(protocol + '.delete', function(emitter, modelID, id) {
+			if (modelID === mID) // block loop
+				return;
+			var obj = this.get(path);
+			if (obj && obj.id === id)
+				this.delete(path);
+		});
+	if (validator)
+		this.validate(path, validator)
+	if (autoSave)
+		this.autoSave(path, protocol, mID, autoSaveDelay);
+	return this;
+};
+
 y.Template.prototype.model = function(path, protocol, autoSave, validator, autoSaveDelay) {
 	if (arguments.length === 1) {
 		protocol = path.protocol;
@@ -197,30 +223,11 @@ y.Template.prototype.model = function(path, protocol, autoSave, validator, autoS
 		autoSaveDelay = path.autoSaveDelay;
 		path = path.path;
 	}
-	var mID = ID++;
 	return this.client(
 		y()
-		.modelMethods(path, protocol)
-		.onAgora(protocol + '.update', function(emitter, modelID, object) {
-			if (modelID === mID) // block loop
-				return;
-			var obj = this.get(path);
-			if (obj.id === object.id)
-				this.set(path, object);
+		.context(function(context) {
+			context.model(path, protocol, autoSave, validator, autoSaveDelay);
 		})
-		.onAgora(protocol + '.delete', function(emitter, modelID, id) {
-			if (modelID === mID) // block loop
-				return;
-			var obj = this.get(path);
-			if (obj.id === id)
-				this.delete(path);
-		})
-		.if(validator,
-			y().validate(path, validator)
-		)
-		.if(autoSave,
-			y().autoSave(path, protocol, mID, autoSaveDelay)
-		)
 	);
 };
 
@@ -281,9 +288,11 @@ y.collectionModel = {
 	}
 };
 
-y.Template.prototype.autoSaveCollection = function(path, protocol, mID, delay) {};
+y.Context.prototype.autoSaveCollection = function(path, protocol, mID, delay) {
+	return this;
+};
 
-y.Template.prototype.collectionModelMethods = function(path, protocol, modelID) {
+y.Context.prototype.collectionModelMethods = function(path, protocol, modelID) {
 	return this
 		.toMethods(path + '.deleteItem', function(e, id) {
 			return y.collectionModel.deleteItem(this, path, protocol, modelID, id);
@@ -296,17 +305,11 @@ y.Template.prototype.collectionModelMethods = function(path, protocol, modelID) 
 		});
 };
 
-y.Template.prototype.collectionModel = function(path, protocol, autoSave, validator) {
-	if (arguments.length === 1) {
-		protocol = path.protocol;
-		autoSave = path.autoSave;
-		validator = path.validator;
-		path = path.path;
-	}
+y.Context.prototype.collectionModel = function(path, protocol, autoSave, validator) {
+
+	console.log('collection Model : ', arguments.length, path);
 	var mID = ID++;
-	return this.client(
-		y()
-		.collectionModelMethods(path, protocol, mID) // newItem(), loadCollection(query), saveItem(index), deleteItem(index)
+	this.collectionModelMethods(path, protocol, mID) // newItem(), loadCollection(query), saveItem(index), deleteItem(index)
 		.onAgora(protocol + '.update', function(emitter, modelID, object) {
 			if (modelID === mID) // block loop
 				return;
@@ -336,13 +339,26 @@ y.Template.prototype.collectionModel = function(path, protocol, autoSave, valida
 			});
 			if (ok)
 				this.delete(path + '.' + index);
+		});
+
+	if (validator) // should be an array's validator
+		this.validate(path, validator)
+	if (autoSave) // should be :
+		this.autoSaveCollection(path, protocol, mID)
+		// should do "collection save" management : aka do remote : post new item, insertItem, displaceItem
+	return this;
+}
+
+y.Template.prototype.collectionModel = function(path, protocol, autoSave, validator) {
+	if (arguments.length === 1) {
+		protocol = path.protocol;
+		autoSave = path.autoSave;
+		validator = path.validator;
+		path = path.path;
+	}
+	return this.client(
+		y().context(function(context) {
+			context.collectionModel(path, protocol, autoSave, validator);
 		})
-		.if(validator, // should be an array's validator
-			y().validate(path, validator)
-		)
-		.if(autoSave, // should be :
-			y().autoSaveCollection(path, protocol, mID)
-			// should do "collection save" management : aka do remote : post new item, insertItem, displaceItem
-		)
 	);
 };
